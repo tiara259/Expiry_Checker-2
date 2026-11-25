@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ED Scanner — Pembaca Tanggal Kedaluwarsa</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header>
+    <h1>ED Scanner</h1>
+    <p class="subtitle">Pembaca Tanggal Kedaluwarsa Produk</p>
+  </header>
+
+  <main>
+
+    <!-- SECTION 1: Upload -->
+    <section id="upload-section">
+      <div class="card">
+        <h2>Pilih Foto Produk</h2>
+        <p class="hint">Upload foto kemasan produk yang memuat tanggal kedaluwarsa.</p>
+        <label id="upload-label" for="file-input" class="btn btn-primary btn-upload">
+          📁 Pilih Foto
+        </label>
+        <!-- capture="environment" agar HP langsung buka kamera belakang -->
+        <input type="file" id="file-input" accept="image/*" capture="environment" />
+      </div>
+    </section>
+
+    <!-- SECTION 2: Crop -->
+    <section id="crop-section" class="hidden">
+      <div class="card">
+        <h2>Crop Tanggal Kedaluwarsa <span class="badge badge-required">Wajib</span></h2>
+        <p class="hint">
+          <strong>Wajib crop.</strong> Seret pada foto untuk memilih <strong>hanya bagian tulisan tanggal kedaluwarsa</strong>
+          (cth: <em>EXP 15 JAN 2027</em>), lalu klik <strong>Gunakan Area Ini</strong>.
+          Semakin pas dan sempit areanya, semakin akurat hasil scan.
+        </p>
+        <p id="crop-required-note" class="alert alert-warning crop-note">
+          ✂️ Pilih area tanggal dulu — tombol baru aktif setelah Anda menyeret area di foto.
+        </p>
+
+        <div id="crop-container">
+          <canvas id="crop-canvas"></canvas>
+        </div>
+
+        <div id="crop-preview-wrap" class="hidden">
+          <p class="hint small">Hasil crop:</p>
+          <canvas id="crop-result-canvas"></canvas>
+        </div>
+
+        <div class="btn-row">
+          <button id="btn-use-crop" class="btn btn-primary" disabled>✂️ Gunakan Area Ini</button>
+          <button id="btn-redo-crop" class="btn btn-secondary hidden">🔄 Ulangi Crop</button>
+          <button id="btn-change-photo" class="btn btn-ghost">↩ Ganti Foto</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 3: Scan Action -->
+    <section id="scan-section" class="hidden">
+      <div class="card">
+        <h2>Siap Discan</h2>
+        <div id="scan-preview-wrap">
+          <img id="scan-preview-img" src="" alt="Gambar yang akan discan" />
+        </div>
+        <div id="progress-wrap" class="hidden">
+          <p id="progress-text">Memproses…</p>
+          <div id="progress-bar-track"><div id="progress-bar"></div></div>
+        </div>
+        <div class="btn-row">
+          <button id="btn-scan" class="btn btn-primary">🔍 Scan Sekarang</button>
+          <button id="btn-back-crop" class="btn btn-ghost">↩ Kembali</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 4: Result -->
+    <section id="result-section" class="hidden">
+      <div class="card">
+        <h2>Hasil Scan</h2>
+
+        <!-- Foto hasil crop: selalu tampil, berhasil maupun gagal -->
+        <div id="result-crop-wrap" class="result-crop-wrap hidden">
+          <p class="hint small">Area yang discan:</p>
+          <img id="result-crop-img" alt="Foto hasil crop yang discan" />
+        </div>
+
+        <!-- Info versi gambar yang berhasil terbaca (dipakai oleh app.js) -->
+        <div id="result-source" class="result-source-label hidden">
+          Dasar hasil: terbaca di <strong id="result-source-name"></strong>
+        </div>
+
+        <div id="result-found" class="hidden">
+          <!-- Primary: status badge (most important, shown first) -->
+          <div id="result-status-wrap" class="status-wrap"></div>
+
+          <!-- Date & days remaining -->
+          <div class="result-row">
+            <span class="result-label">📅 Tanggal Kedaluwarsa</span>
+            <span id="result-date" class="result-value big"></span>
+          </div>
+          <div class="result-row">
+            <span class="result-label">⏳ Sisa / Lewat</span>
+            <span id="result-days" class="result-value"></span>
+          </div>
+
+          <p id="result-warning" class="alert alert-warning hidden"></p>
+
+          <div id="row-mfg" class="result-row hidden">
+            <span class="result-label">🏭 Tanggal Produksi (MFG)</span>
+            <span id="result-mfg" class="result-value"></span>
+          </div>
+
+          <!-- Secondary detail (collapsible feel) -->
+          <div id="row-confidence" class="result-row result-row-muted hidden">
+            <span class="result-label">🎯 Keyakinan Pembacaan</span>
+            <span id="result-confidence" class="result-value muted"></span>
+          </div>
+          <div id="row-raw" class="result-row result-row-muted hidden">
+            <span class="result-label">🔎 Teks Tercetak</span>
+            <span id="result-raw" class="result-value muted"></span>
+          </div>
+          <div class="result-row result-row-muted">
+            <span class="result-label">🔑 Label</span>
+            <span id="result-keyword" class="result-value muted"></span>
+          </div>
+          <div class="result-row result-row-muted">
+            <span class="result-label">🗂️ Format</span>
+            <span id="result-pattern" class="result-value muted"></span>
+          </div>
+        </div>
+
+        <!-- CONFIRMATION PANEL: shown when unlabelled dates need user disambiguation -->
+        <div id="result-confirm" class="hidden">
+          <p id="confirm-intro" class="alert alert-info">
+            🤔 Ditemukan beberapa tanggal tanpa label yang jelas.<br>
+            Pilih mana yang merupakan <strong>tanggal kedaluwarsa</strong>:
+          </p>
+          <div id="confirm-candidates" class="confirm-list"></div>
+          <p class="confirm-hint">Tidak ada yang cocok?</p>
+          <div class="btn-row" style="margin-top:0.5rem">
+            <button id="btn-confirm-crop" class="btn btn-secondary">✂️ Crop Ulang</button>
+            <button id="btn-confirm-upload" class="btn btn-secondary">📁 Upload Foto Baru</button>
+          </div>
+        </div>
+
+        <div id="result-not-found" class="hidden">
+          <p id="not-found-msg" class="alert alert-warning">⚠️ Tanggal kedaluwarsa tidak dapat dipastikan. Unggah foto yang lebih jelas atau masukkan tanggal secara manual.</p>
+          <p id="not-found-partial" class="hint hidden" style="margin-top:0.5rem"></p>
+          <ul class="recovery-list">
+            <li>📸 Foto ulang dengan pencahayaan lebih baik</li>
+            <li>✂️ Crop pas di baris tanggal (EXP / ED) dengan sedikit margin, jangan terpotong</li>
+            <li>🔦 Gunakan flash atau cahaya samping untuk tulisan timbul</li>
+          </ul>
+          <div class="btn-row" style="margin-top:0.75rem">
+            <button id="btn-retry-crop" class="btn btn-secondary">✂️ Crop Ulang</button>
+            <button id="btn-retry-upload" class="btn btn-secondary">📁 Upload Foto Baru</button>
+          </div>
+
+          <!-- Manual input fallback -->
+          <div class="manual-input-wrap">
+            <p class="manual-input-label">✏️ Atau masukkan tanggal secara manual:</p>
+            <div class="manual-input-row">
+              <input type="text" id="manual-date-input"
+                     placeholder="cth: 21 FEB 2029 / 21/02/2029 / 02/2029"
+                     class="manual-input" maxlength="24" />
+              <button id="btn-manual-submit" class="btn btn-primary">Konfirmasi</button>
+            </div>
+            <p id="manual-date-error" class="manual-input-error hidden">Format tidak dikenali. Coba: 21 FEB 2029, 21/02/2029, atau 02/2029</p>
+          </div>
+        </div>
+
+        <div id="result-error" class="hidden">
+          <p class="alert alert-error">❌ OCR gagal karena kesalahan teknis. Coba langkah berikut:</p>
+          <div class="btn-row" style="margin-top:0.75rem">
+            <button id="btn-retry-crop-err" class="btn btn-secondary">✂️ Crop Ulang</button>
+            <button id="btn-retry-upload-err" class="btn btn-secondary">📁 Upload Foto Baru</button>
+          </div>
+        </div>
+
+        <details id="ocr-debug" class="ocr-debug hidden">
+          <summary>Lihat teks yang terbaca OCR</summary>
+          <pre id="ocr-debug-text"></pre>
+        </details>
+
+        <div class="btn-row">
+          <button id="btn-scan-again" class="btn btn-primary">🔄 Scan Lagi</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>ED Scanner — dibaca oleh Gemini Vision. Hanya area crop yang dikirim ke server untuk dianalisis; tidak disimpan.</p>
+  </footer>
+
+  <!-- Mesin tanggal (murni) lalu aplikasi. Tesseract.js TIDAK dimuat di awal: hanya saat mode cadangan. -->
+  <script src="date-parser.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
