@@ -18,13 +18,33 @@
     <!-- SECTION 1: Upload -->
     <section id="upload-section">
       <div class="card">
-        <h2>Pilih Foto Produk</h2>
-        <p class="hint">Upload foto kemasan produk yang memuat tanggal kedaluwarsa.</p>
-        <label id="upload-label" for="file-input" class="btn btn-primary btn-upload">
-          📁 Pilih Foto
-        </label>
-        <!-- capture="environment" agar HP langsung buka kamera belakang -->
-        <input type="file" id="file-input" accept="image/*" capture="environment" />
+        <h2>Cek Tanggal Kedaluwarsa</h2>
+        <p class="hint"><strong>Scan cepat:</strong> buka kamera, taruh tulisan tanggal (EXP / ED) di dalam kotak bidik, lalu tekan Scan — tanpa crop manual.
+          Atau pilih foto yang sudah ada dari galeri.</p>
+        <div class="btn-row" style="margin-top:0">
+          <button id="btn-open-camera" class="btn btn-primary btn-upload">📷 Buka Kamera</button>
+          <label id="upload-label" for="file-input" class="btn btn-secondary btn-upload">📁 Pilih Foto</label>
+        </div>
+        <!-- tanpa capture: galeri/berkas bisa dipilih; kamera langsung memakai tombol di atas -->
+        <input type="file" id="file-input" accept="image/*" />
+      </div>
+    </section>
+
+    <!-- SECTION 1b: Kamera live + kotak bidik -->
+    <section id="camera-section" class="hidden">
+      <div class="card">
+        <h2>Arahkan ke Tanggal ED</h2>
+        <p class="hint">Taruh tulisan tanggal di dalam kotak. Dekatkan sampai tulisan terlihat jelas dan tajam, lalu tekan <strong>Scan</strong>.</p>
+        <div id="camera-stage">
+          <video id="camera-video" playsinline muted autoplay></video>
+          <div id="camera-box"></div>
+        </div>
+        <p id="camera-error" class="alert alert-warning hidden" style="margin-top:0.75rem"></p>
+        <div class="btn-row">
+          <button id="btn-camera-capture" class="btn btn-primary" disabled>📸 Scan</button>
+          <button id="btn-camera-torch" class="btn btn-secondary hidden">🔦 Lampu</button>
+          <button id="btn-camera-close" class="btn btn-ghost">↩ Kembali</button>
+        </div>
       </div>
     </section>
 
@@ -142,7 +162,7 @@
           <p class="confirm-hint">Tidak ada yang cocok?</p>
           <div class="btn-row" style="margin-top:0.5rem">
             <button id="btn-confirm-crop" class="btn btn-secondary">✂️ Crop Ulang</button>
-            <button id="btn-confirm-upload" class="btn btn-secondary">📁 Upload Foto Baru</button>
+            <button id="btn-confirm-upload" class="btn btn-secondary">📷 Foto Ulang</button>
           </div>
         </div>
 
@@ -156,7 +176,7 @@
           </ul>
           <div class="btn-row" style="margin-top:0.75rem">
             <button id="btn-retry-crop" class="btn btn-secondary">✂️ Crop Ulang</button>
-            <button id="btn-retry-upload" class="btn btn-secondary">📁 Upload Foto Baru</button>
+            <button id="btn-retry-upload" class="btn btn-secondary">📷 Foto Ulang</button>
           </div>
 
           <!-- Manual input fallback -->
@@ -176,7 +196,7 @@
           <p class="alert alert-error">❌ OCR gagal karena kesalahan teknis. Coba langkah berikut:</p>
           <div class="btn-row" style="margin-top:0.75rem">
             <button id="btn-retry-crop-err" class="btn btn-secondary">✂️ Crop Ulang</button>
-            <button id="btn-retry-upload-err" class="btn btn-secondary">📁 Upload Foto Baru</button>
+            <button id="btn-retry-upload-err" class="btn btn-secondary">📷 Foto Ulang</button>
           </div>
         </div>
 

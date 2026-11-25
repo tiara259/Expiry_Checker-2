@@ -600,3 +600,40 @@ footer {
   max-height: 220px;
   overflow: auto;
 }
+
+/* --- Kamera live + kotak bidik --- */
+#camera-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: 72vh;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+}
+#camera-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;          /* dipakai juga dalam rumus potong di app.js */
+}
+#camera-box {
+  position: absolute;
+  left: 6%;
+  width: 88%;
+  top: 50%;
+  transform: translateY(-50%);
+  aspect-ratio: 3 / 1;
+  border: 2px solid #fff;
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);   /* gelapkan di luar kotak */
+}
+#camera-box::after {
+  content: "Tanggal ED di dalam kotak";
+  position: absolute;
+  left: 0; right: 0; bottom: -1.7rem;
+  text-align: center;
+  color: #fff;
+  font-size: 0.78rem;
+}

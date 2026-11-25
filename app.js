@@ -15,6 +15,7 @@ const state = {
   originalDataURL: null,    // Data URL of original image
   cropDataURL: null,        // Data URL of cropped region (null = use original)
   useCrop: false,           // Whether user chose cropped version
+  source: null,             // 'camera' (kotak bidik) | 'file' (galeri) — menentukan tombol "Scan Lagi"
 };
 
 /* ============================================================
@@ -24,6 +25,7 @@ const $ = id => document.getElementById(id);
 
 const sections = {
   upload:  $('upload-section'),
+  camera:  $('camera-section'),
   crop:    $('crop-section'),
   scan:    $('scan-section'),
   result:  $('result-section'),
@@ -48,6 +50,7 @@ const btnScanAgain     = $('btn-scan-again');
    SECTION VISIBILITY HELPERS
    ============================================================ */
 function showOnly(sectionKey) {
+  if (sectionKey !== 'camera') stopCamera();      // kamera tidak boleh menyala di halaman lain
   Object.keys(sections).forEach(k => {
     sections[k].classList.toggle('hidden', k !== sectionKey);
   });
@@ -60,6 +63,7 @@ fileInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
   state.originalFile = file;
+  state.source = 'file';
 
   const reader = new FileReader();
   reader.onload = (ev) => {
@@ -434,11 +438,133 @@ async function runTesseractFallback(dataURL) {
   } finally { await worker.terminate(); }
 }
 
-btnScanAgain.addEventListener('click', () => {
+
+/* ============================================================
+   KAMERA LIVE + KOTAK BIDIK — scan cepat tanpa crop manual
+   Kasir menaruh tulisan tanggal di dalam kotak → area kotak otomatis
+   dipotong dari frame video beresolusi penuh → langsung discan.
+   ============================================================ */
+const camVideo   = $('camera-video');
+const camStage   = $('camera-stage');
+const camBox     = $('camera-box');
+const camError   = $('camera-error');
+const btnCamCapture = $('btn-camera-capture');
+const btnCamTorch   = $('btn-camera-torch');
+let camStream = null;
+let torchOn = false;
+
+function stopCamera() {
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  if (camVideo) camVideo.srcObject = null;
+}
+
+function cameraFail(msg) {
+  stopCamera();
+  btnCamCapture.disabled = true;
+  camError.textContent = '📷 ' + msg + ' Anda tetap bisa memakai tombol "Pilih Foto".';
+  camError.classList.remove('hidden');
+}
+
+async function openCamera() {
   resetAll();
-  showOnly('upload');
-  fileInput.value = '';
+  state.source = 'camera';
+  showOnly('camera');
+  camError.classList.add('hidden');
+  btnCamTorch.classList.add('hidden');
+  btnCamTorch.textContent = '🔦 Lampu';
+  torchOn = false;
+  btnCamCapture.disabled = true;
+
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+  } catch (e) {
+    const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+    return cameraFail(denied ? 'Izin kamera ditolak.' : 'Kamera tidak dapat dibuka (butuh HTTPS dan kamera yang tersedia).');
+  }
+  camVideo.srcObject = camStream;
+  try { await camVideo.play(); } catch { /* autoplay dikelola browser */ }
+
+  try {                                   // fokus kontinu & lampu bila didukung perangkat
+    const track = camStream.getVideoTracks()[0];
+    const caps = (track.getCapabilities && track.getCapabilities()) || {};
+    if (caps.focusMode && caps.focusMode.includes('continuous')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+    }
+    if (caps.torch) btnCamTorch.classList.remove('hidden');
+  } catch { /* opsional */ }
+
+  btnCamCapture.disabled = false;
+}
+
+/** Potong frame video sesuai posisi kotak bidik. Memperhitungkan object-fit: cover. */
+function captureFromViewfinder() {
+  const vw = camVideo.videoWidth, vh = camVideo.videoHeight;
+  if (!vw || !vh) return null;
+
+  const st = camStage.getBoundingClientRect();
+  const bx = camBox.getBoundingClientRect();
+  const k  = Math.max(st.width / vw, st.height / vh);           // skala video → layar
+  const ox = (st.width  - vw * k) / 2;
+  const oy = (st.height - vh * k) / 2;
+
+  let sx = (bx.left - st.left - ox) / k, sy = (bx.top - st.top - oy) / k;
+  let sw = bx.width / k,                 sh = bx.height / k;
+  sx = Math.max(0, sx); sy = Math.max(0, sy);
+  sw = Math.min(vw - sx, sw); sh = Math.min(vh - sy, sh);
+
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(sw)); c.height = Math.max(1, Math.round(sh));
+  c.getContext('2d').drawImage(camVideo, sx, sy, sw, sh, 0, 0, c.width, c.height);
+
+  const f = document.createElement('canvas');                    // frame penuh, untuk "Crop ulang"
+  f.width = vw; f.height = vh;
+  f.getContext('2d').drawImage(camVideo, 0, 0);
+
+  return { crop: c.toDataURL('image/jpeg', 0.92), full: f.toDataURL('image/jpeg', 0.85) };
+}
+
+btnCamCapture.addEventListener('click', () => {
+  const shot = captureFromViewfinder();
+  if (!shot) { cameraFail('Gambar kamera belum siap.'); return; }
+  stopCamera();
+  state.source = 'camera';
+  state.originalDataURL = shot.full;
+  state.cropDataURL = shot.crop;
+  state.useCrop = true;
+  prepareScanSection(shot.crop);
+  showOnly('scan');
+  btnScan.click();                                               // langsung scan, tanpa langkah crop
 });
+
+btnCamTorch.addEventListener('click', async () => {
+  const track = camStream && camStream.getVideoTracks()[0];
+  if (!track) return;
+  torchOn = !torchOn;
+  try {
+    await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+    btnCamTorch.textContent = torchOn ? '🔦 Lampu: Nyala' : '🔦 Lampu';
+  } catch { torchOn = !torchOn; }
+});
+
+$('btn-camera-close').addEventListener('click', () => { resetAll(); showOnly('upload'); fileInput.value = ''; });
+$('btn-open-camera').addEventListener('click', () => {
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { fileInput.click(); return; }
+  openCamera();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && camStream) cameraFail('Kamera dihentikan karena halaman ditinggalkan.');
+});
+
+/** "Scan Lagi" / "Foto Ulang": kembali ke sumber yang sama (kamera → langsung kamera). */
+function restartInput() {
+  if (state.source === 'camera') { openCamera(); return; }
+  resetAll(); showOnly('upload'); fileInput.value = '';
+}
+
+btnScanAgain.addEventListener('click', restartInput);
 
 // Retry: go back to crop section with the existing photo
 function goBackToCrop() {
@@ -448,15 +574,12 @@ function goBackToCrop() {
   progressBar.style.width = '0%';
   progressText.textContent = 'Memproses…';
   clearManualInput();
+  if (!crop.img && state.originalDataURL) initCropSection(state.originalDataURL);   // dari kamera: crop manual memakai frame penuh
   showOnly('crop');
 }
 
 // Retry: start fresh — go back to upload
-function goBackToUpload() {
-  resetAll();
-  showOnly('upload');
-  fileInput.value = '';
-}
+function goBackToUpload() { restartInput(); }
 
 $('btn-retry-crop').addEventListener('click', goBackToCrop);
 $('btn-retry-upload').addEventListener('click', goBackToUpload);
@@ -741,11 +864,15 @@ function renderGemini(r) {
     const mfg = toExtraction(r.manufacture);
     ex.extra = {
       mfg: mfg ? mfg.displayDate : null,
-      raw: (r.expiry && r.expiry.raw) || null,
-      confidence: CONFIDENCE_TEXT[r.confidence] || null,
-      warning: r.confidence === 'medium'
-        ? 'Keyakinan sedang' + (r.qualityIssue ? ` (${r.qualityIssue})` : '') + ' — cocokkan tanggal di atas dengan foto, atau foto ulang dengan lebih jelas.'
+      // contoh: "SEP 28 → bulan & tahun: September 2028 (tanpa hari)"
+      raw: (r.expiry && r.expiry.raw)
+        ? r.expiry.raw + (r.interpretation ? ' → ' + r.interpretation : '')
         : null,
+      confidence: CONFIDENCE_TEXT[r.confidence] || null,
+      warning: r.note
+        || (r.confidence === 'medium'
+          ? 'Keyakinan sedang' + (r.qualityIssue ? ` (${r.qualityIssue})` : '') + ' — cocokkan tanggal di atas dengan foto, atau foto ulang dengan lebih jelas.'
+          : null),
     };
     return showFoundPanel(ex);
   }
@@ -792,6 +919,7 @@ function resetAll() {
   state.originalDataURL = null;
   state.cropDataURL     = null;
   state.useCrop         = false;
+  state.source          = null;
 
   crop.drawing   = false;
   crop.confirmed = false;
