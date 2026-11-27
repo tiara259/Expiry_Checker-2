@@ -12,6 +12,10 @@
  */
 'use strict';
 
+const F = require('../date-formats.js');   // pembaca format tanggal (menentukan arti dari teks cetakan)
+
+const VERSION = 'v4-format-aware';          // tampil di panel "Teks terbaca" agar mudah memeriksa versi yang ter-deploy
+
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MODELS = [
   process.env.GEMINI_MODEL || 'gemini-3.8-flash',
@@ -40,6 +44,12 @@ WHAT TO FIND
 1. EXPIRY date. It may be labelled EXP, EXP., EXPIRY, EXPIRY DATE, ED, E.D., BB, BBE, BEST BEFORE, USE BEFORE, USE BY, KADALUARSA, KEDALUWARSA, BAIK DIGUNAKAN SEBELUM — or have NO label at all.
 2. MANUFACTURING date, labelled MFG, MFD, MFG DATE, PROD, DOM, "Diproduksi", "Tgl Produksi", "Produced" (or similar). Never mix it up with the expiry date.
 3. Batch / lot numbers (e.g. "066 2708-0140", "LOT A123") are NOT dates. Ignore them as dates, but keep them in raw_text.
+
+HOW TO REPORT THE DATE
+- "raw" = the date text exactly as printed, WITHOUT its label (e.g. "SEP 28", not "ED SEP 28"). Put the label alone in "label".
+- A month name/abbreviation followed only by digits — "SEP 28", "SEP-28", "SEP2028", "SEPTEMBER 2028" — means MONTH + YEAR (September 2028). Report precision="month", day=null. The number there is NEVER a day.
+- Two numbers such as "09/28" or "09/2028" are month/year. Three numbers such as "15/06/27" are day/month/year.
+- Never invent a day or a year that is not printed (do not use today's date or the current year). If no year is printed, set uncertain=true.
 
 FORMATS TO UNDERSTAND (with or without separators)
 21FEB2029, 21 FEB 2029, 21-FEB-29, 21/02/2029, 21.02.29, 02/2029, FEB 2029, 2029-02-21, 20290221, JAN 15 2027, Indonesian months (JAN FEB MAR APR MEI JUN JUL AGU/AGT SEP OKT NOP/NOV DES), e.g. "15 AGUSTUS 2027". Dot-matrix / inkjet prints are made of separate dots; ":" after a label may look like another character. Embossed, tiny or slanted text is common.
@@ -133,9 +143,24 @@ function cleanDate(d) {
   const base = { label: str(d.label, 60), raw: str(d.raw, 60), detail: str(d.uncertain_detail, 200) };
   if (d.uncertain === true) return { state: 'uncertain', ...base };
 
+  // 1) Teks cetakan (raw) adalah sumber kebenaran untuk ARTI tanggal: "SEP 28" = bulan+tahun, bukan hari.
+  const p = base.raw ? F.parse(base.raw) : null;
+  const parseNote = !base.raw ? 'raw kosong' : p.ok ? `parser OK (${p.format})` : `parser: ${p.issue}`;
+  if (p && p.ok) {
+    const date = p.precision === 'month' ? `${p.year}-${pad(p.month)}` : `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+    const out = { state: 'ok', ...base, parseNote, precision: p.precision, date, format: p.format, interpretation: p.interpretation, warn: p.warn };
+    if (p.alt) out.alt = { precision: p.alt.precision, date: p.alt.precision === 'month' ? `${p.alt.year}-${pad(p.alt.month)}` : `${p.alt.year}-${pad(p.alt.month)}-${pad(p.alt.day)}` };
+    return out;
+  }
+  if (p && p.issue === 'uncertain') return { state: 'uncertain', ...base, detail: base.detail || p.detail };
+  if (p && p.issue === 'no_year')   return { state: 'uncertain', ...base, detail: 'Tahun tidak tercetak pada tanggal ini, jadi tidak bisa ditentukan.' };
+  if (p && p.issue === 'invalid')   return { state: 'invalid', ...base, detail: p.detail };
+
+  // 2) Format tidak dikenali oleh pembaca format → pakai angka dari model, tapi tandai "belum terverifikasi"
   let { day, month, year } = d;
   if (!Number.isInteger(month) || !Number.isInteger(year)) {
-    return { state: 'uncertain', ...base, detail: base.detail || 'Bagian bulan/tahun tidak lengkap terbaca.' };
+    return { state: 'uncertain', ...base, parseNote, detail: base.detail ||
+      (base.raw ? `Format "${base.raw}" tidak dikenali oleh pembaca tanggal.` : 'Bagian bulan/tahun tidak lengkap terbaca.') };
   }
   if (year < 100) year += 2000;                               // 2 digit → 20YY (konvensi, bukan tebakan)
   if (year < 2000 || year > 2100 || month < 1 || month > 12) {
@@ -143,18 +168,32 @@ function cleanDate(d) {
   }
   const precision = d.precision === 'month' || day == null ? (d.precision === 'day' ? null : 'month') : 'day';
   if (precision === null) return { state: 'uncertain', ...base, detail: base.detail || 'Hari tidak jelas terbaca.' };
-  if (precision === 'month') return { state: 'ok', ...base, precision, date: `${year}-${pad(month)}` };
+  const un = { parseNote, unverified: true, warn: 'Format tanggal ini tidak dikenali otomatis — cocokkan dengan foto.' };
+  if (precision === 'month') return { state: 'ok', ...base, ...un, precision, date: `${year}-${pad(month)}` };
   if (!Number.isInteger(day) || !validDay(year, month, day)) {
     return { state: 'invalid', ...base, detail: `Tanggal ${day}/${month}/${year} tidak ada di kalender.` };
   }
-  const out = { state: 'ok', ...base, precision, date: `${year}-${pad(month)}-${pad(day)}` };
+  const out = { state: 'ok', ...base, ...un, precision, date: `${year}-${pad(month)}-${pad(day)}` };
   if (d.order_ambiguous === true && day <= 12 && month <= 12 && day !== month && validDay(year, day, month)) {
-    out.alt = `${year}-${pad(day)}-${pad(month)}`;           // tafsiran MM/DD sebagai opsi konfirmasi
+    out.alt = { precision: 'day', date: `${year}-${pad(day)}-${pad(month)}` };
   }
   return out;
 }
 
 const pub = d => ({ date: d.date, precision: d.precision, label: d.label, raw: d.raw });
+
+/** Tanggal berbentuk nama-bulan pada tiap baris teks (angka murni seperti nomor batch sengaja diabaikan). */
+function looseDates(rawText) {
+  const seen = new Map();
+  for (const line of String(rawText || '').split(/\r?\n/)) {
+    const p = line.includes('?') ? null : F.parse(line);
+    if (p && p.ok && /MMM/.test(p.format)) {
+      const date = p.precision === 'month' ? `${p.year}-${pad(p.month)}` : `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+      seen.set(date, { date, precision: p.precision, raw: line.trim().slice(0, 60), interpretation: p.interpretation });
+    }
+  }
+  return [...seen.values()];
+}
 
 function buildResult(g, model) {
   const exp = cleanDate(g.expiry), mfg = cleanDate(g.manufacture);
@@ -162,12 +201,25 @@ function buildResult(g, model) {
   const out = {
     status: 'ok', confidence, model,
     expiry: null, manufacture: mfg.state === 'ok' ? pub(mfg) : null,
-    partial: null, candidates: null, reason: null,
+    partial: null, candidates: null, reason: null, interpretation: null, format: null, note: null,
     rawText: str(g.raw_text, 1000) || '',
+    version: VERSION,
+    debug: `server ${VERSION} | raw=${JSON.stringify(exp.raw || null)} | ${exp.parseNote || (exp.state === 'none' ? 'tanggal tidak ditemukan' : exp.state)} | model ${model}`,
     qualityIssue: str(g.image_quality_issue, 80),
   };
 
-  if (exp.state === 'none') {
+  // Model tidak menandai EXP, tetapi teks yang terbaca memuat tepat satu tanggal berbentuk nama-bulan (mis. "JUNE 29")
+  // tanpa label → tawarkan sebagai kandidat untuk dikonfirmasi pengguna (tidak langsung dianggap pasti).
+  const loose = (exp.state === 'none' && mfg.state !== 'ok') ? looseDates(g.raw_text) : [];
+
+  if (exp.state === 'none' && loose.length === 1) {
+    const l = loose[0];
+    out.status = 'confirm';
+    out.reason = 'Tanggal tanpa label terbaca. Pastikan ini memang tanggal kedaluwarsa.';
+    out.candidates = [{ date: l.date, precision: l.precision, label: null, raw: l.raw }];
+    out.expiry = out.candidates[0];
+    out.interpretation = l.interpretation;
+  } else if (exp.state === 'none') {
     out.status = 'not_found';
     out.reason = mfg.state === 'ok'
       ? 'Hanya tanggal produksi (MFG) yang terbaca; tanggal kedaluwarsa tidak terlihat di area ini.'
@@ -185,11 +237,17 @@ function buildResult(g, model) {
       out.reason = 'Tanggal EXP terbaca lebih awal dari tanggal MFG — kemungkinan ada digit yang salah baca.';
     } else if (exp.alt) {
       out.status = 'confirm';
-      out.candidates = [pub(exp), { ...pub(exp), date: exp.alt }];
+      out.candidates = [pub(exp), { ...pub(exp), date: exp.alt.date, precision: exp.alt.precision }];
       out.reason = 'Urutan hari/bulan pada cetakan tidak dapat dipastikan.';
       out.expiry = pub(exp);
     } else {
       out.expiry = pub(exp);
+    }
+    if (out.expiry) {
+      out.interpretation = exp.interpretation || null;
+      out.format = exp.format || null;
+      out.note = exp.warn || null;
+      if (out.note && out.confidence === 'high') out.confidence = 'medium';   // perlu dicocokkan pengguna
     }
   }
   return out;
