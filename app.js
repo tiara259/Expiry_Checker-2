@@ -645,13 +645,19 @@ function showConfirmPanel(candidates) {
     const daysText  = formatDaysRemaining(days, isMonthOnly);
     const displayD  = c.displayDate || c.normalizedDate;
 
-    btn.innerHTML = `
-      <span class="cdate">${displayD}</span>
-      <span class="cmeta">
-        <span class="ctag">${isExpired ? '⚠️ Sudah lewat' : '📦 Aktif'}</span><br>
-        ${daysText}<br>
-        <span style="font-size:0.68rem;opacity:0.7">${c.patternName}</span>
-      </span>`;
+     if (!isExpired || isSameMonth) {
+    statusWrap.innerHTML = `
+      <div class="status-block valid">
+        <span class="status-icon">✅</span>
+        <span class="status-text">BELUM KEDALUWARSA</span>
+      </div>`;
+  } else {
+    statusWrap.innerHTML = `
+      <div class="status-block expired">
+        <span class="status-icon">❌</span>
+        <span class="status-text">KEDALUWARSA</span>
+      </div>`;
+  }
 
     btn.addEventListener('click', () => {
       showFoundPanel({
