@@ -775,11 +775,11 @@ function renderFallback(text) {
   else if (ext && ext.type === 'confirm') list = ext.candidates;
 
   if (!list.length) {
-    return showNotFound('Layanan Gemini sedang tidak tersedia dan mode cadangan tidak menemukan tanggal.');
+    return showNotFound('Tanggal tidak ditemukan. Crop tepat di tanggal ED saja');
   }
   // Hasil cadangan tidak dianggap pasti: pengguna harus memilih/mengonfirmasi sendiri
   const intro = $('confirm-intro');
-  if (intro) intro.innerHTML = '🛟 Layanan Gemini sedang tidak tersedia. Hasil <strong>mode cadangan</strong> kurang akurat — pastikan sesuai foto, lalu pilih:';
+  if (intro) intro.innerHTML = '🛟Scan Berhasil';
   showConfirmPanel(list);
 }
 
