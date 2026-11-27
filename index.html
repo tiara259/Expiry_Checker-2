@@ -34,8 +34,8 @@
         <h2>Crop Tanggal Kedaluwarsa <span class="badge badge-required">Wajib</span></h2>
         <p class="hint">
           <strong>Wajib crop.</strong> Seret pada foto untuk memilih <strong>hanya bagian tulisan tanggal kedaluwarsa</strong>
-          (cth: <em>EXP 15 JAN 2027</em>), lalu klik <strong>Gunakan Area Ini</strong>.
-          Semakin pas dan sempit areanya, semakin akurat hasil scan.
+          (cth: <em>EXP 15 JAN 2027 atau 15 JAN 2027</em>), lalu klik <strong>Gunakan Area Ini</strong>.
+          Semakin pas areanya, semakin akurat hasil scan.
         </p>
         <p id="crop-required-note" class="alert alert-warning crop-note">
           ✂️ Pilih area tanggal dulu — tombol baru aktif setelah Anda menyeret area di foto.
@@ -134,10 +134,6 @@
 
         <!-- CONFIRMATION PANEL: shown when unlabelled dates need user disambiguation -->
         <div id="result-confirm" class="hidden">
-          <p id="confirm-intro" class="alert alert-info">
-            🤔 Ditemukan beberapa tanggal tanpa label yang jelas.<br>
-            Pilih mana yang merupakan <strong>tanggal kedaluwarsa</strong>:
-          </p>
           <div id="confirm-candidates" class="confirm-list"></div>
           <p class="confirm-hint">Tidak ada yang cocok?</p>
           <div class="btn-row" style="margin-top:0.5rem">
@@ -151,8 +147,8 @@
           <p id="not-found-partial" class="hint hidden" style="margin-top:0.5rem"></p>
           <ul class="recovery-list">
             <li>📸 Foto ulang dengan pencahayaan lebih baik</li>
-            <li>✂️ Crop pas di baris tanggal (EXP / ED) dengan sedikit margin, jangan terpotong</li>
-            <li>🔦 Gunakan flash atau cahaya samping untuk tulisan timbul</li>
+            <li>✂️ Crop pas di baris tanggal, jangan terpotong</li>
+            <li>🔦 Gunakan flash untuk tulisan timbul</li>
           </ul>
           <div class="btn-row" style="margin-top:0.75rem">
             <button id="btn-retry-crop" class="btn btn-secondary">✂️ Crop Ulang</button>
