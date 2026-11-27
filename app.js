@@ -775,7 +775,7 @@ function renderFallback(text) {
   else if (ext && ext.type === 'confirm') list = ext.candidates;
 
   if (!list.length) {
-    return showNotFound('Tanggal tidak ditemukan. Crop tepat di tanggal ED saja');
+    return showNotFound('Tanggal tidak ditemukan. Crop tepat di tanggal ED dan gunakan senter');
   }
   // Hasil cadangan tidak dianggap pasti: pengguna harus memilih/mengonfirmasi sendiri
   const intro = $('confirm-intro');
